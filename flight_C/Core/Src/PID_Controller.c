@@ -2,6 +2,7 @@
 #include "IMU.h"
 #include <stdio.h>
 #include <math.h>
+#include "rc_manager.h"
 
 double rate_kp = 0.0;
 double rate_ki = 0.0;
@@ -11,7 +12,6 @@ double angle_kp = 0.0;
 double angle_ki = 0.0;
 double angle_kd = 0.0;
 
-static uint32_t last_time_ms = 0;
 
 
 
@@ -53,6 +53,7 @@ double PID_update(PID *pid, double setpoint, double measurement, double dt)
 void flight_control_loop(IMUData imu_data, dataPacket controller)
 {
    // Calculate time delta for PID update
+   static uint32_t last_time_ms = 0;
     uint32_t current_time_ms = HAL_GetTick();
     double dt = (current_time_ms - last_time_ms) / 1000.0; // convert ms to seconds
     last_time_ms = current_time_ms;

@@ -1,104 +1,130 @@
 #include "main.h"
 #include "IMU.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 
-#define MPU6050_ADDR  0xD0
+#define MPU6050_ADDR  (0x68 << 1)
 #define PWR_MGMT_1    0x6B
 #define ACCEL_XOUT_H  0x3B
 
-// All calibration offsets stored together
-static IMUData calibration_offset = {0.0, 0.0, 0.0};
+static IMUData calibration_offset = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 static double  gz_bias            = 0.0;
-
-void IMU_Init(void)
-{
-  MPU6050_Init();
-}
 
 void MPU6050_Init(void)
 {
-  uint8_t data = 0x00;
-  for (int i = 0; i < 3; i++)
-  {
-    if (HAL_I2C_Mem_Write(&hi2c1, MPU6050_ADDR, PWR_MGMT_1, 1, &data, 1, 100) == HAL_OK)
-      break;
-    HAL_Delay(10);
-  }
+    uint8_t data = 0x00;
+    for (int i = 0; i < 3; i++)
+    {
+        if (HAL_I2C_Mem_Write(&hi2c1, MPU6050_ADDR, PWR_MGMT_1, 1, &data, 1, 100) == HAL_OK)
+            break;
+        HAL_Delay(10);
+    }
 }
 
 void MPU6050_Read(int16_t *ax, int16_t *ay, int16_t *az,
                   int16_t *gx, int16_t *gy, int16_t *gz)
 {
-  uint8_t buf[14];
-  if (HAL_I2C_Mem_Read(&hi2c1, MPU6050_ADDR, ACCEL_XOUT_H, 1, buf, 14, 100) != HAL_OK)
-  {
-    *ax = *ay = *az = *gx = *gy = *gz = 0;
-    return;
-  }
+    uint8_t buf[14];
+    if (HAL_I2C_Mem_Read(&hi2c1, MPU6050_ADDR, ACCEL_XOUT_H, 1, buf, 14, 100) != HAL_OK)
+    {
+        *ax = *ay = *az = *gx = *gy = *gz = 0;
+        return;
+    }
 
-  *ax = (int16_t)(buf[0]  << 8 | buf[1]);
-  *ay = (int16_t)(buf[2]  << 8 | buf[3]);
-  *az = (int16_t)(buf[4]  << 8 | buf[5]);
-  *gx = (int16_t)(buf[8]  << 8 | buf[9]);
-  *gy = (int16_t)(buf[10] << 8 | buf[11]);
-  *gz = (int16_t)(buf[12] << 8 | buf[13]);
+    *ax = (int16_t)(buf[0]  << 8 | buf[1]);
+    *ay = (int16_t)(buf[2]  << 8 | buf[3]);
+    *az = (int16_t)(buf[4]  << 8 | buf[5]);
+    *gx = (int16_t)(buf[8]  << 8 | buf[9]);
+    *gy = (int16_t)(buf[10] << 8 | buf[11]);
+    *gz = (int16_t)(buf[12] << 8 | buf[13]);
+}
+
+void IMU_Init(void)
+{
+    MPU6050_Init();
 }
 
 void IMU_Calibrate(int samples)
 {
-  int16_t ax, ay, az, gx, gy, gz;
-  double pitch_sum = 0.0;
-  double roll_sum  = 0.0;
-  double gz_sum    = 0.0;
+    int16_t ax, ay, az, gx, gy, gz;
 
-  for (int i = 0; i < samples; i++)
-  {
-    MPU6050_Read(&ax, &ay, &az, &gx, &gy, &gz);
+    double pitch_sum = 0.0;
+    double roll_sum  = 0.0;
+    double gz_sum    = 0.0;
 
-    pitch_sum += atan2((double)ay, (double)az) * 180.0 / M_PI;
-    roll_sum  += atan2((double)ax, (double)az) * 180.0 / M_PI;
-    gz_sum    += gz;
+    for (int i = 0; i < samples; i++)
+    {
+        MPU6050_Read(&ax, &ay, &az, &gx, &gy, &gz);
 
-    HAL_Delay(2);
-  }
+        pitch_sum += atan2((double)ay, (double)az) * 180.0 / M_PI;
+        roll_sum  += atan2((double)ax, (double)az) * 180.0 / M_PI;
+        gz_sum    += gz;
 
-  calibration_offset.pitch = pitch_sum / samples;
-  calibration_offset.roll  = roll_sum  / samples;
-  gz_bias                  = gz_sum    / samples;
+        HAL_Delay(2);
+    }
+
+    calibration_offset.pitch = pitch_sum / samples;
+    calibration_offset.roll  = roll_sum  / samples;
+    gz_bias                  = gz_sum    / samples;
 }
 
-IMUData IMU_GetAngles(double dt)
+IMUData IMU_GetAngles(void)
 {
-  static double pitch       = 0.0;
-  static double roll        = 0.0;
-  static int    initialized = 0;
+    static uint32_t last_time_ms = 0;
+    uint32_t now = HAL_GetTick();
+    double dt = (now - last_time_ms) / 1000.0;
+    last_time_ms = now;
 
-  int16_t ax, ay, az, gx, gy, gz;
-  MPU6050_Read(&ax, &ay, &az, &gx, &gy, &gz);
+    static double pitch       = 0.0;
+    static double roll        = 0.0;
+    static double yaw         = 0.0;
+    static int    initialized = 0;
 
-  double accel_pitch = atan2((double)ay, (double)az) * 180.0 / M_PI - calibration_offset.pitch;
-  double accel_roll  = atan2((double)ax, (double)az) * 180.0 / M_PI - calibration_offset.roll;
+    int16_t ax, ay, az, gx, gy, gz;
+    MPU6050_Read(&ax, &ay, &az, &gx, &gy, &gz);
 
-  // Seed filter from accelerometer on first call so we don't
-  // start 5-10 degrees wrong and slowly converge
-  if (!initialized)
-  {
-    pitch       = accel_pitch;
-    roll        = accel_roll;
-    initialized = 1;
-  }
+    double accel_pitch = atan2((double)ay, (double)az) * 180.0 / M_PI - calibration_offset.pitch;
+    double accel_roll  = atan2((double)ax, (double)az) * 180.0 / M_PI - calibration_offset.roll;
 
-  double gyro_pitch = (gx / 131.0) * dt;
-  double gyro_roll  = (gy / 131.0) * dt;
+    if (!initialized)
+    {
+        pitch       = accel_pitch;
+        roll        = accel_roll;
+        initialized = 1;
+    }
 
-  pitch = 0.98 * (pitch + gyro_pitch) + 0.02 * accel_pitch;
-  roll  = 0.98 * (roll  + gyro_roll)  + 0.02 * accel_roll;
+    double gyro_pitch = (gx / 131.0) * dt;
+    double gyro_roll  = (gy / 131.0) * dt;
 
-  double yaw_rate = (gz - gz_bias) / 131.0;
-  double pitch_rate = (gx / 131.0);
-  double roll_rate = (gy / 131.0);
+    pitch = 0.98 * (pitch + gyro_pitch) + 0.02 * accel_pitch;
+    roll  = 0.98 * (roll  + gyro_roll)  + 0.02 * accel_roll;
 
-  IMUData data = {pitch, roll, yaw_rate, pitch_rate, roll_rate};
-  return data;
+    // gyro only yaw — magnetometer disabled
+    double gz_rate = (gz - gz_bias) / 131.0;
+    if (fabs(gz_rate) < 0.15)  // threshold in deg/s, tune this
+        gz_rate = 0.0;
+    double gyro_yaw = gz_rate * dt;
+    yaw = yaw + gyro_yaw;
+
+    double yaw_rate   = (gz - gz_bias) / 131.0;
+    double pitch_rate = (gx / 131.0);
+    double roll_rate  = (gy / 131.0);
+
+    IMUData data = {pitch, roll, yaw, yaw_rate, pitch_rate, roll_rate};
+    return data;
+}
+
+void IMU_PrintTelemetry(IMUData data)
+{
+    char msg[128];
+    int p = (int)round(data.pitch * 100.0);
+    int r = (int)round(data.roll  * 100.0);
+    int y = (int)round(data.yaw   * 100.0);
+    int len = snprintf(msg, sizeof(msg),
+        "IMU data: pitch:%d.%02d roll:%d.%02d yaw:%d.%02d\r\n",
+        p/100, abs(p%100),
+        r/100, abs(r%100),
+        y/100, abs(y%100));
+    HAL_UART_Transmit(&huart1, (uint8_t*)msg, (uint16_t)len, 100);
 }

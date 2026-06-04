@@ -80,6 +80,16 @@ void nrf24l01p_rx_init(channel MHz, air_data_rate bps)
 {
     nrf24l01p_reset();
 
+    write_register(NRF24L01P_REG_EN_AA, 0x00);  // disable auto-ack, match transmitter
+
+    // Set pipe 0 address to match ESP32 RF24 library default
+    uint8_t addr[5] = {0xE7, 0xE7, 0xE7, 0xE7, 0xE7};
+    cs_low();
+    uint8_t cmd = NRF24L01P_CMD_W_REGISTER | NRF24L01P_REG_RX_ADDR_P0;
+    HAL_SPI_Transmit(NRF24L01P_SPI, &cmd, 1, 2000);
+    HAL_SPI_Transmit(NRF24L01P_SPI, addr, 5, 2000);
+    cs_high();
+
     nrf24l01p_prx_mode();
     nrf24l01p_power_up();
 
@@ -89,12 +99,12 @@ void nrf24l01p_rx_init(channel MHz, air_data_rate bps)
     nrf24l01p_set_rf_air_data_rate(bps);
     nrf24l01p_set_rf_tx_output_power(_0dBm);
 
-    nrf24l01p_set_crc_length(1);
+    nrf24l01p_set_crc_length(2);
     nrf24l01p_set_address_widths(5);
 
-    nrf24l01p_auto_retransmit_count(3);
-    nrf24l01p_auto_retransmit_delay(250);
-    
+    nrf24l01p_auto_retransmit_count(0);
+    nrf24l01p_auto_retransmit_delay(0);
+
     ce_high();
 }
 

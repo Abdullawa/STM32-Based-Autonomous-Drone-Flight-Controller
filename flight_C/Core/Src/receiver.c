@@ -31,32 +31,30 @@ bool Receiver_IsIrqPin(uint16_t GPIO_Pin)
 // Call from main loop to service IRQs and read payloads via SPI (safe context)
 void Receiver_Process(void)
 {
-  if (!irq_flag) return;
-
-  __disable_irq();
-  irq_flag = false;
-  __enable_irq();
-
-  uint8_t payload[NRF24L01P_PAYLOAD_LENGTH];
-
-  // Read until RX FIFO empty. RX_EMPTY bit (bit0) == 1 when empty for nRF24
-  while ((nrf24l01p_get_fifo_status() & 0x01) == 0)
-  {
-    // Perform blocking SPI read now that we're outside ISR
-    nrf24l01p_rx_receive(payload);
-
-    uint8_t next_head = (rx_head + 1) % RX_BUFFER_SIZE;
-    if (next_head == rx_tail)
+    while ((nrf24l01p_get_fifo_status() & 0x01) == 0)
     {
-      // buffer overflow: drop oldest
-      overflow_flag = true;
-      rx_tail = (rx_tail + 1) % RX_BUFFER_SIZE;
+        uint8_t payload[NRF24L01P_PAYLOAD_LENGTH];
+        nrf24l01p_rx_receive(payload);
+
+        // Validate before copying into ring buffer
+        dataPacket *pkt = (dataPacket *)payload;
+        if (pkt->sync != 0xAA || pkt->type != 0x01)
+            continue;  // drop corrupted packet
+
+        uint8_t next_head = (rx_head + 1) % RX_BUFFER_SIZE;
+        if (next_head == rx_tail)
+        {
+            overflow_flag = true;
+            rx_tail = (rx_tail + 1) % RX_BUFFER_SIZE;
+        }
+
+        memcpy(&rx_buffer[rx_head], payload, sizeof(dataPacket));
+        rx_head = next_head;
     }
 
-    // Copy payload into ring buffer
-    memcpy(&rx_buffer[rx_head], payload, sizeof(dataPacket));
-    rx_head = next_head;
-  }
+    __disable_irq();
+    irq_flag = false;
+    __enable_irq();
 }
 
 dataPacket Receiver_GetPacket(void)

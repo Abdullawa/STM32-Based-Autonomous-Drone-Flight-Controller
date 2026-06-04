@@ -22,16 +22,17 @@
 #ifndef __MAIN_H
 #define __MAIN_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+
 
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
-
+#include <stdbool.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "IMU.h"
+#include "receiver.h"
+#include "rc_manager.h"
+#include "PID_Controller.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -53,8 +54,10 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-extern I2C_HandleTypeDef hi2c1;
-extern UART_HandleTypeDef huart1;
+// Peripheral handles (defined by CubeMX in their respective .c files)
+extern I2C_HandleTypeDef  hi2c1;
+extern SPI_HandleTypeDef  hspi1;
+extern UART_HandleTypeDef huart1;;
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/

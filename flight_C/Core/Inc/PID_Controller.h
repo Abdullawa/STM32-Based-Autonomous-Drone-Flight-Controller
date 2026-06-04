@@ -2,6 +2,8 @@
 #define PID_CONTROLLER_H
 
 #include "main.h"
+#include "IMU.h"
+#include "rc_manager.h"
 
 typedef struct {
   double kp;
