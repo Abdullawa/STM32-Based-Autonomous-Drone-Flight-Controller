@@ -1,6 +1,0 @@
-../Core/Src/receiver.c:14:6:Receiver_Init	8	static
-../Core/Src/receiver.c:20:6:Receiver_OnIrq	4	static
-../Core/Src/receiver.c:26:6:Receiver_IsIrqPin	16	static
-../Core/Src/receiver.c:32:6:Receiver_Process	32	static,ignoring_inline_asm
-../Core/Src/receiver.c:62:12:Receiver_GetPacket	32	static
-../Core/Src/receiver.c:68:6:Receiver_ReadPacket	16	static,ignoring_inline_asm

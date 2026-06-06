@@ -1,0 +1,7 @@
+# Build artifacts
+flight_C/Debug/
+flight_C/Release/
+
+# STM32CubeIDE settings (optional, some people keep these)
+# .cproject
+# .project

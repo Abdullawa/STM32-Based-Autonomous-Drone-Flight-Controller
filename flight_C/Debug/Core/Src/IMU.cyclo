@@ -1,5 +1,0 @@
-../Core/Src/IMU.c:12:6:IMU_Init	1
-../Core/Src/IMU.c:17:6:MPU6050_Init	3
-../Core/Src/IMU.c:29:6:MPU6050_Read	2
-../Core/Src/IMU.c:48:9:IMU_Calibrate	2
-../Core/Src/IMU.c:72:9:IMU_GetAngles	1

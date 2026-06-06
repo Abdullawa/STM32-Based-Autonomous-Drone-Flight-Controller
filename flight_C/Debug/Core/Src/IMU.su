@@ -1,5 +1,0 @@
-../Core/Src/IMU.c:12:6:IMU_Init	8	static
-../Core/Src/IMU.c:17:6:MPU6050_Init	32	static
-../Core/Src/IMU.c:29:6:MPU6050_Read	56	static
-../Core/Src/IMU.c:48:9:IMU_Calibrate	136	static
-../Core/Src/IMU.c:72:9:IMU_GetAngles	160	static
