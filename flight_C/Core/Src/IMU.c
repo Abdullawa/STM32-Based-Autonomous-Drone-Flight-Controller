@@ -8,8 +8,13 @@
 #define PWR_MGMT_1    0x6B
 #define ACCEL_XOUT_H  0x3B
 
-static IMUData calibration_offset = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-static double  gz_bias            = 0.0;
+static double pitch_rate_filt = 0.0;
+static double roll_rate_filt  = 0.0;
+static double yaw_rate_filt   = 0.0;
+
+static double gx_bias = 0.0;
+static double gy_bias = 0.0;
+static double gz_bias = 0.0;
 
 void MPU6050_Init(void)
 {
@@ -20,6 +25,12 @@ void MPU6050_Init(void)
             break;
         HAL_Delay(10);
     }
+
+    // Set DLPF — register 0x1A (CONFIG)
+    // Value 0x03 = 44Hz gyro bandwidth, good starting point for a drone
+    // Options: 0x00=260Hz, 0x01=184Hz, 0x02=94Hz, 0x03=44Hz, 0x04=21Hz
+    uint8_t dlpf = 0x03;
+    HAL_I2C_Mem_Write(&hi2c1, MPU6050_ADDR, 0x1A, 1, &dlpf, 1, 100);
 }
 
 void MPU6050_Read(int16_t *ax, int16_t *ay, int16_t *az,
@@ -35,6 +46,8 @@ void MPU6050_Read(int16_t *ax, int16_t *ay, int16_t *az,
     *ax = (int16_t)(buf[0]  << 8 | buf[1]);
     *ay = (int16_t)(buf[2]  << 8 | buf[3]);
     *az = (int16_t)(buf[4]  << 8 | buf[5]);
+    // buf[6]/buf[7] are the MPU6050 temperature registers and are intentionally ignored here
+    // we continue reading gyro data from buf[8]..
     *gx = (int16_t)(buf[8]  << 8 | buf[9]);
     *gy = (int16_t)(buf[10] << 8 | buf[11]);
     *gz = (int16_t)(buf[12] << 8 | buf[13]);
@@ -49,69 +62,102 @@ void IMU_Calibrate(int samples)
 {
     int16_t ax, ay, az, gx, gy, gz;
 
-    double pitch_sum = 0.0;
-    double roll_sum  = 0.0;
-    double gz_sum    = 0.0;
+    double gx_sum = 0.0;
+    double gy_sum = 0.0;
+    double gz_sum = 0.0;
 
     for (int i = 0; i < samples; i++)
     {
         MPU6050_Read(&ax, &ay, &az, &gx, &gy, &gz);
 
-        pitch_sum += atan2((double)ay, (double)az) * 180.0 / M_PI;
-        roll_sum  += atan2((double)ax, (double)az) * 180.0 / M_PI;
-        gz_sum    += gz;
+        gx_sum += gx;
+        gy_sum += gy;
+        gz_sum += gz;
 
         HAL_Delay(2);
     }
 
-    calibration_offset.pitch = pitch_sum / samples;
-    calibration_offset.roll  = roll_sum  / samples;
-    gz_bias                  = gz_sum    / samples;
+    gx_bias = gx_sum / samples;
+    gy_bias = gy_sum / samples;
+    gz_bias = gz_sum / samples;
 }
 
-IMUData IMU_GetAngles(void)
+IMUData IMU_GetAngles(double dt)
 {
-    static uint32_t last_time_ms = 0;
-    uint32_t now = HAL_GetTick();
-    double dt = (now - last_time_ms) / 1000.0;
-    last_time_ms = now;
+    // dt is provided by caller (main loop). Clamp for safety here as well.
+    if (dt <= 0.0) dt = 0.001;
+    if (dt > 0.05) dt = 0.05;
 
-    static double pitch       = 0.0;
-    static double roll        = 0.0;
-    static double yaw         = 0.0;
-    static int    initialized = 0;
+    static double pitch = 0.0;
+    static double roll  = 0.0;
+    static double yaw   = 0.0;
+    static int initialized = 0;
 
     int16_t ax, ay, az, gx, gy, gz;
     MPU6050_Read(&ax, &ay, &az, &gx, &gy, &gz);
 
-    double accel_pitch = atan2((double)ay, (double)az) * 180.0 / M_PI - calibration_offset.pitch;
-    double accel_roll  = atan2((double)ax, (double)az) * 180.0 / M_PI - calibration_offset.roll;
+    // =========================
+    // GRAVITY-BASED ATTITUDE (decoupled 3-axis formulas)
+    // =========================
+    double ax_f = (double)ax;
+    double ay_f = (double)ay;
+    double az_f = (double)az;
+    double accel_pitch = atan2(ax_f, sqrt(ay_f*ay_f + az_f*az_f)) * 180.0 / M_PI;
+    double accel_roll  = atan2(ay_f,  sqrt(ax_f*ax_f + az_f*az_f)) * 180.0 / M_PI;
 
+    // initialize gyro state from first accel reading ONLY
     if (!initialized)
     {
-        pitch       = accel_pitch;
-        roll        = accel_roll;
+        pitch = accel_pitch;
+        roll  = accel_roll;
+        yaw   = 0.0;
         initialized = 1;
     }
 
-    double gyro_pitch = (gx / 131.0) * dt;
-    double gyro_roll  = (gy / 131.0) * dt;
+    // =========================
+    // GYRO RATES
+    // =========================
+    // subtract calibrated gyro biases and convert to deg/s (MPU6050 scale)
+    double gyro_pitch_rate = -(gy - gy_bias) / 131.0;
+    double gyro_roll_rate  = (gx - gx_bias) / 131.0;
 
-    pitch = 0.98 * (pitch + gyro_pitch) + 0.02 * accel_pitch;
-    roll  = 0.98 * (roll  + gyro_roll)  + 0.02 * accel_roll;
+    // integrate gyro
+    pitch += gyro_pitch_rate * dt;
+    roll  += gyro_roll_rate  * dt;
 
-    // gyro only yaw — magnetometer disabled
+    // complementary filter (gravity correction)
+    pitch = 0.98 * pitch + 0.02 * accel_pitch;
+    roll  = 0.98 * roll  + 0.02 * accel_roll;
+
+    // =========================
+    // YAW (gyro only)
+    // =========================
     double gz_rate = (gz - gz_bias) / 131.0;
-    if (fabs(gz_rate) < 0.15)  // threshold in deg/s, tune this
+
+    // deadband
+    if (fabs(gz_rate) < 0.15)
         gz_rate = 0.0;
-    double gyro_yaw = gz_rate * dt;
-    yaw = yaw + gyro_yaw;
 
-    double yaw_rate   = (gz - gz_bias) / 131.0;
-    double pitch_rate = (gx / 131.0);
-    double roll_rate  = (gy / 131.0);
+    yaw += gz_rate * dt;
 
-    IMUData data = {pitch, roll, yaw, yaw_rate, pitch_rate, roll_rate};
+    // optional wrap
+    if (yaw > 180.0) yaw -= 360.0;
+    if (yaw < -180.0) yaw += 360.0;
+
+    // =========================
+    // RATES OUTPUT
+    // =========================
+
+    #define GYRO_LPF_ALPHA 0.1
+
+    pitch_rate_filt = GYRO_LPF_ALPHA * gyro_pitch_rate + (1.0 - GYRO_LPF_ALPHA) * pitch_rate_filt;
+    roll_rate_filt  = GYRO_LPF_ALPHA * gyro_roll_rate  + (1.0 - GYRO_LPF_ALPHA) * roll_rate_filt;
+    yaw_rate_filt   = GYRO_LPF_ALPHA * gz_rate         + (1.0 - GYRO_LPF_ALPHA) * yaw_rate_filt;
+
+
+    IMUData data = {pitch, roll, yaw,
+                    yaw_rate_filt, pitch_rate_filt, roll_rate_filt};
+
     return data;
 }
 

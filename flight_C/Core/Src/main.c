@@ -15,12 +15,14 @@
 /* USER CODE BEGIN Includes */
 #include "IMU.h"
 #include "receiver.h"
+#include "tim.h"
 #include "rc_manager.h"
 #include "PID_Controller.h"
+#include "motor_control.h"
 #include <stdio.h>
 #include <stdlib.h>
 /* USER CODE END Includes */
-
+#include <math.h>  // add this
 /* USER CODE BEGIN PV */
 static inline void MX_IWDG_Init(void) { /* no-op */ }
 static inline void Watchdog_Refresh(void) { /* no-op */ }
@@ -34,12 +36,13 @@ int main(void)
     SystemClock_Config();
 
     MX_GPIO_Init();
+    MX_TIM2_Init();
     MX_USART1_UART_Init();
     MX_I2C1_Init();
     MX_SPI1_Init();
     MX_IWDG_Init();
+    Motor_PWM_Init();
 
-    /* USER CODE BEGIN 2 */
     Receiver_Init();
     IMU_Init();
 
@@ -48,30 +51,49 @@ int main(void)
     HAL_I2C_Mem_Read(&hi2c1, (0x68 << 1), 0x75, 1, &who, 1, 100);
     char dbg[32];
     int dlen = snprintf(dbg, sizeof(dbg), "MPU WHO_AM_I: 0x%02X\r\n", who);
-    HAL_UART_Transmit(&huart1, (uint8_t *)dbg, dlen, 100);
+    HAL_UART_Transmit(&huart1, (uint8_t*)dbg, dlen, 100);
 
     IMU_Calibrate(500);
-    /* USER CODE END 2 */
 
+    // Motor arming sequence - hold idle until stick gesture detected
+    //Motor_Arm();
+
+    // Main loop: compute dt once and pass into IMU and control loop
+    uint32_t last_time_ms = HAL_GetTick();
     while (1)
     {
         Receiver_Process();
         RC_Update();
-        RC_PrintTelemetry();
 
-        IMUData imu = IMU_GetAngles();
-        IMU_PrintTelemetry(imu);
+        uint32_t now = HAL_GetTick();
+        double dt = (now - last_time_ms) / 1000.0;
+        if (dt <= 0.0) dt = 0.001;
+        if (dt > 0.05) dt = 0.05;
+        last_time_ms = now;
+
+        IMUData imu = IMU_GetAngles(dt);
 
         dataPacket controller;
-        if (RC_GetLatestPacket(&controller) && !RC_IsKillActive())
+        controller.pitch = 0.0;
+        controller.roll  = 0.0;
+        controller.yaw   = 0.0;
+        controller.throttle = 550.0;
+        controller.kill = 0;
+
+            flight_control_loop(imu, controller, dt);
+
+        /*if (!RC_IsKillActive())
         {
-            flight_control_loop(imu, controller);
+            flight_control_loop(imu, controller, dt);
         }
-
-        if (!RC_IsKillActive())
-            Watchdog_Refresh();
-
-        HAL_Delay(1);
+        else
+        {
+            // Kill switch active — zero all motors
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, 1000);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, 1000);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, 1000);
+            __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, 1000);
+        }*/
     }
 }
 
