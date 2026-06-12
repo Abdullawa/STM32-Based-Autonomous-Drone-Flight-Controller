@@ -5,8 +5,8 @@ from collections import deque
 
 # ---- config ----
 PORT    = 'COM3'    # change to your port
-BAUD    = 115200
-HISTORY = 200       # samples visible on screen
+BAUD    = 460800
+HISTORY = 300       # samples visible on screen
 # ----------------
 
 data = {k: deque([0.0] * HISTORY, maxlen=HISTORY) for k in

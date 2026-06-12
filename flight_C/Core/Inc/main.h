@@ -63,6 +63,14 @@ extern UART_HandleTypeDef huart1;
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define FL_motor_Pin GPIO_PIN_0
+#define FL_motor_GPIO_Port GPIOA
+#define FR_motor_Pin GPIO_PIN_1
+#define FR_motor_GPIO_Port GPIOA
+#define BL_motor_Pin GPIO_PIN_2
+#define BL_motor_GPIO_Port GPIOA
+#define BR_motor_Pin GPIO_PIN_3
+#define BR_motor_GPIO_Port GPIOA
 #define CS_Pin GPIO_PIN_4
 #define CS_GPIO_Port GPIOC
 #define CE_Pin GPIO_PIN_5
@@ -71,6 +79,10 @@ extern UART_HandleTypeDef huart1;
 #define Iqr_GPIO_Port GPIOB
 #define led_Pin GPIO_PIN_2
 #define led_GPIO_Port GPIOB
+#define IMU_SCL_Pin GPIO_PIN_6
+#define IMU_SCL_GPIO_Port GPIOB
+#define IMU_SDA_Pin GPIO_PIN_7
+#define IMU_SDA_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

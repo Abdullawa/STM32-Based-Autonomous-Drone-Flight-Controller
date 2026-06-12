@@ -8,14 +8,14 @@
 #define MAX_MIX_OUTPUT 1000.0
 
 typedef struct{
-    double motor_front_left;
-    double motor_front_right;
-    double motor_back_left;
-    double motor_back_right;
+    float motor_front_left;
+    float motor_front_right;
+    float motor_back_left;
+    float motor_back_right;
 } MotorControl;
 
-MotorControl motor_mixing(double throttle, double pitch_output, double roll_output, double yaw_output);
-int16_t pwm_from_output(double output);
+MotorControl motor_mixing(float throttle, float pitch_output, float roll_output, float yaw_output);
+int16_t pwm_from_output(float output);
 void Motor_PWM_Init(void);
 void Motor_Arm(void);
 

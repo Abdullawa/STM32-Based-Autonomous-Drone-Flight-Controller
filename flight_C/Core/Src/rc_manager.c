@@ -69,7 +69,7 @@ void RC_PrintTelemetry(void)
                        latest_packet.throttle,
                        latest_packet.kill);
 
-    HAL_UART_Transmit(&huart1, (uint8_t *)msg, (uint16_t)len, 100);
+    //HAL_UART_Transmit(&huart1, (uint8_t *)msg, (uint16_t)len, 100);
 }
 
 bool RC_GetLatestPacket(dataPacket *out)

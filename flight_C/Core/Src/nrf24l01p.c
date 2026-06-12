@@ -75,6 +75,16 @@ static uint8_t write_register(uint8_t reg, uint8_t value)
 }
 
 
+static void write_address(uint8_t reg, uint8_t *addr)
+{
+    uint8_t cmd = NRF24L01P_CMD_W_REGISTER | reg;
+
+    cs_low();
+    HAL_SPI_Transmit(NRF24L01P_SPI, &cmd, 1, 100);
+    HAL_SPI_Transmit(NRF24L01P_SPI, addr, 5, 100);
+    cs_high();
+}
+
 /* nRF24L01+ Main Functions */
 void nrf24l01p_rx_init(channel MHz, air_data_rate bps)
 {
@@ -112,21 +122,50 @@ void nrf24l01p_tx_init(channel MHz, air_data_rate bps)
 {
     nrf24l01p_reset();
 
+    uint8_t addr[5] =
+    {
+        0xE7,
+        0xE7,
+        0xE7,
+        0xE7,
+        0xE7
+    };
+
+    // TX address
+    cs_low();
+    uint8_t cmd = NRF24L01P_CMD_W_REGISTER | NRF24L01P_REG_TX_ADDR;
+    HAL_SPI_Transmit(NRF24L01P_SPI, &cmd, 1, 100);
+    HAL_SPI_Transmit(NRF24L01P_SPI, addr, 5, 100);
+    cs_high();
+
+    // Pipe0 address
+    cs_low();
+    cmd = NRF24L01P_CMD_W_REGISTER | NRF24L01P_REG_RX_ADDR_P0;
+    HAL_SPI_Transmit(NRF24L01P_SPI, &cmd, 1, 100);
+    HAL_SPI_Transmit(NRF24L01P_SPI, addr, 5, 100);
+    cs_high();
+
+    write_register(NRF24L01P_REG_EN_AA, 0x00);
+
     nrf24l01p_ptx_mode();
     nrf24l01p_power_up();
 
-    nrf24l01p_set_rf_channel(MHz);
-    nrf24l01p_set_rf_air_data_rate(bps);
+    nrf24l01p_rx_set_payload_widths(NRF24L01P_PAYLOAD_LENGTH);
+
+    nrf24l01p_set_rf_channel(100);
+    nrf24l01p_set_rf_air_data_rate(_1Mbps);
     nrf24l01p_set_rf_tx_output_power(_0dBm);
 
-    nrf24l01p_set_crc_length(1);
+    nrf24l01p_set_crc_length(2);
     nrf24l01p_set_address_widths(5);
 
-    nrf24l01p_auto_retransmit_count(3);
-    nrf24l01p_auto_retransmit_delay(250);
+    nrf24l01p_auto_retransmit_count(0);
+    nrf24l01p_auto_retransmit_delay(0);
 
-    ce_high();
+    HAL_Delay(5);
 }
+
+
 
 void nrf24l01p_rx_receive(uint8_t* rx_payload)
 {
@@ -136,7 +175,14 @@ void nrf24l01p_rx_receive(uint8_t* rx_payload)
 
 void nrf24l01p_tx_transmit(uint8_t* tx_payload)
 {
+    ce_low();
+
+    nrf24l01p_flush_tx_fifo();
     nrf24l01p_write_tx_fifo(tx_payload);
+
+    ce_high();
+    HAL_Delay(1);
+    ce_low();
 }
 
 void nrf24l01p_tx_irq()
@@ -397,4 +443,17 @@ void nrf24l01p_set_rf_air_data_rate(air_data_rate bps)
             break;
     }
     write_register(NRF24L01P_REG_RF_SETUP, new_rf_setup);
+}
+
+void nrf24l01p_switch_to_rx(void) {
+    ce_low();
+    nrf24l01p_prx_mode();  // Set to RX mode
+    nrf24l01p_rx_set_payload_widths(NRF24L01P_PAYLOAD_LENGTH);
+    ce_high();
+}
+
+void nrf24l01p_switch_to_tx(void) {
+    ce_low();
+    nrf24l01p_ptx_mode();  // Set to TX mode
+    ce_high();
 }

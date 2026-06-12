@@ -3,7 +3,7 @@
 #include "tim.h"
 #include <stdio.h>
 
-MotorControl motor_mixing(double throttle, double pitch_output, double roll_output, double yaw_output)
+MotorControl motor_mixing(float throttle, float pitch_output, float roll_output, float yaw_output)
 {
     MotorControl output;
 
@@ -13,7 +13,7 @@ MotorControl motor_mixing(double throttle, double pitch_output, double roll_outp
     output.motor_back_left   = throttle - pitch_output + roll_output + yaw_output; // BL
     output.motor_back_right  = throttle - pitch_output - roll_output - yaw_output; // BR
     // Proportional rescaling mixer to preserve ratios while keeping outputs in [0, MAX_MIX_OUTPUT]
-    double min_out = output.motor_front_left;
+    float min_out = output.motor_front_left;
     if (output.motor_front_right < min_out) min_out = output.motor_front_right;
     if (output.motor_back_left  < min_out) min_out = output.motor_back_left;
     if (output.motor_back_right < min_out) min_out = output.motor_back_right;
@@ -21,7 +21,7 @@ MotorControl motor_mixing(double throttle, double pitch_output, double roll_outp
     // If any output is negative, shift all up so the minimum is zero
     if (min_out < 0.0)
     {
-        double shift = -min_out;
+        float shift = -min_out;
         output.motor_front_left  += shift;
         output.motor_front_right += shift;
         output.motor_back_left   += shift;
@@ -29,14 +29,14 @@ MotorControl motor_mixing(double throttle, double pitch_output, double roll_outp
     }
 
     // If any output exceeds MAX_MIX_OUTPUT, scale all down proportionally
-    double max_out = output.motor_front_left;
+    float max_out = output.motor_front_left;
     if (output.motor_front_right > max_out) max_out = output.motor_front_right;
     if (output.motor_back_left  > max_out) max_out = output.motor_back_left;
     if (output.motor_back_right > max_out) max_out = output.motor_back_right;
 
     if (max_out > MAX_MIX_OUTPUT)
     {
-        double scale = MAX_MIX_OUTPUT / max_out;
+        float scale = MAX_MIX_OUTPUT / max_out;
         output.motor_front_left  *= scale;
         output.motor_front_right *= scale;
         output.motor_back_left   *= scale;
@@ -86,12 +86,12 @@ void Motor_Arm(void)
     }
 }
 
-int16_t pwm_from_output(double output)
+int16_t pwm_from_output(float output)
 {
     if (output > MAX_MIX_OUTPUT) output = MAX_MIX_OUTPUT;
     if (output < 0.0) output = 0.0;
 
-    double pwm = 1000.0 + (output / MAX_MIX_OUTPUT) * 1000.0;
+    float pwm = 1000.0 + (output / MAX_MIX_OUTPUT) * 1000.0;
     if (pwm > 2000.0) pwm = 2000.0;
     if (pwm < 1000.0) pwm = 1000.0;
 
@@ -147,5 +147,5 @@ void Motor_PrintTelemetry(MotorControl data)
         pwm_bl,
         pwm_br);
 
-    HAL_UART_Transmit(&huart1, (uint8_t*)msg, (uint16_t)len, 100);
+    //HAL_UART_Transmit(&huart1, (uint8_t*)msg, (uint16_t)len, 100);
 }

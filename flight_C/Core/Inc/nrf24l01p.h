@@ -28,7 +28,7 @@
 #define NRF24L01P_IRQ_PIN_PORT            GPIOB
 #define NRF24L01P_IRQ_PIN_NUMBER          GPIO_PIN_0
 
-#define NRF24L01P_PAYLOAD_LENGTH          12     // 1 - 32bytes
+#define NRF24L01P_PAYLOAD_LENGTH          14     // 1 - 32bytes
 
 
 /* nRF24L01+ typedefs */
@@ -142,5 +142,8 @@ void nrf24l01p_auto_retransmit_delay(delay us);
 #define NRF24L01P_REG_DYNPD             0x1C
 #define NRF24L01P_REG_FEATURE           0x1D
 
+
+void nrf24l01p_switch_to_rx();
+void nrf24l01p_switch_to_tx();
 
 #endif /* __NRF24L01P_H__ */

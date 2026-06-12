@@ -430,7 +430,7 @@
       "no_connect_dangling": "warning",
       "pin_not_connected": "error",
       "pin_not_driven": "error",
-      "pin_to_pin": "warning",
+      "pin_to_pin": "error",
       "power_pin_not_driven": "error",
       "same_local_global_label": "warning",
       "similar_label_and_power": "warning",
@@ -613,6 +613,10 @@
     [
       "9a8c8180-bc44-4bfb-a88d-dc807a1cf84f",
       "Root"
+    ],
+    [
+      "04160192-ad90-4a18-a2dd-f7f31a5cd80c",
+      "STM32_Core"
     ]
   ],
   "text_variables": {}
